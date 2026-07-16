@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=64.0"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
+name = "agent-framework"
+version = "1.0.0"
+description = "AI Agent framework toolkit — pure Python standard library implementation"
+requires-python = ">=3.10"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short --strict-markers"
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+]
+
+[tool.flake8]
+max-line-length = 120
+max-complexity = 10
+extend-ignore = ["E203", "W503"]
+exclude = [".git", "__pycache__", ".pytest_cache"]

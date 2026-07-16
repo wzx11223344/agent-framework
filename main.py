@@ -51,6 +51,8 @@ def react_reasoning_loop(query, tools, max_iterations=10):
     tool_calls = []
     context = query
     answer = None
+    tool_call_count = 0
+    max_tool_calls = max_iterations * 2
 
     for i in range(max_iterations):
         # Thought: 分析当前状态，决定下一步
@@ -76,6 +78,17 @@ def react_reasoning_loop(query, tools, max_iterations=10):
         tool_input = thought.get("tool_input", "")
 
         if tool_name and tool_name in tools:
+            # 安全检查：防止工具调用次数无限增长
+            tool_call_count += 1
+            if tool_call_count > max_tool_calls:
+                answer = f"达到最大工具调用次数 ({max_tool_calls})，停止推理: {context}"
+                reasoning_chain.append({
+                    "step": i + 1,
+                    "type": "final_answer",
+                    "content": answer,
+                })
+                break
+
             try:
                 observation = tools[tool_name](tool_input)
                 tool_calls.append({
@@ -108,7 +121,7 @@ def react_reasoning_loop(query, tools, max_iterations=10):
                 })
                 context += f"\n[Error]: {e}"
         else:
-            # 无可用工具，直接给出答案
+            # 无可用工具（tools为空或tool_name不在tools中），直接给出答案
             answer = f"基于推理: {context}"
             reasoning_chain.append({
                 "step": i + 1,
@@ -187,6 +200,7 @@ def chain_of_thought_solver(problem, steps):
     results = []
     backtracks = 0
     step_idx = 0
+    max_backtracks = len(steps) * 3  # 防止无限回溯
 
     while step_idx < len(steps):
         step = steps[step_idx]
@@ -244,7 +258,7 @@ def chain_of_thought_solver(problem, steps):
 
         if not verified:
             # 回溯到前一步
-            if step_idx > 0:
+            if step_idx > 0 and backtracks < max_backtracks:
                 step_idx -= 1
                 backtracks += 1
                 trace.append({
@@ -371,9 +385,24 @@ def agent_workflow_orchestrator(tasks, dependencies, agents):
     # 构建邻接表和入度表
     adj = defaultdict(list)
     in_degree = {tid: 0 for tid in tasks}
+    missing_task_ids = set()
     for pred, succ in dependencies:
-        adj[pred].append(succ)
-        in_degree[succ] = in_degree.get(succ, 0) + 1
+        if pred not in tasks:
+            missing_task_ids.add(pred)
+        if succ not in tasks:
+            missing_task_ids.add(succ)
+        if pred in tasks and succ in tasks:
+            adj[pred].append(succ)
+            in_degree[succ] = in_degree.get(succ, 0) + 1
+
+    if missing_task_ids:
+        return {
+            "execution_order": [],
+            "results": {},
+            "skipped": [],
+            "status": "error",
+            "error": f"依赖中包含未定义的任务ID: {sorted(missing_task_ids)}",
+        }
 
     # Kahn 拓扑排序
     queue = [tid for tid in tasks if in_degree[tid] == 0]
@@ -475,6 +504,11 @@ def tool_registry_and_dispatcher(tool_name, args, registry):
     # 静态缓存（跨调用保留）
     if not hasattr(tool_registry_and_dispatcher, "_cache"):
         tool_registry_and_dispatcher._cache = {}
+
+    # 类型检查：args 必须是 dict
+    if not isinstance(args, dict):
+        return {"result": None, "cached": False,
+                "error": f"args 必须是 dict 类型，收到 {type(args).__name__}"}
 
     if tool_name not in registry:
         return {"result": None, "cached": False,
@@ -597,9 +631,9 @@ def memory_manager_short_long_term(operation, data, params=None):
                     doc_tf = doc["tf"][word] / max(1, doc["length"])
                     word_idf = math.log((N + 1) / (1 + idf[word])) if idf[word] > 0 else 1.0
                     sim += q_tf * doc_tf * word_idf
-            # 归一化
+            # 归一化（防止除零：当查询词频全为零时跳过归一化）
             norm = math.sqrt(sum(v ** 2 for v in query_tf.values()))
-            if norm > 0:
+            if norm > 1e-10:
                 sim /= norm
             scores.append((sim, idx, doc["text"]))
 

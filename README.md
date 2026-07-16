@@ -1,5 +1,7 @@
 # agent-framework
 
+[![CI](https://github.com/wzx11223344/agent-framework/actions/workflows/ci.yml/badge.svg)](https://github.com/wzx11223344/agent-framework/actions/workflows/ci.yml)
+
 AI Agent 框架工具集 — 纯 Python 标准库实现，无外部依赖。
 
 ## 功能列表
@@ -20,7 +22,7 @@ AI Agent 框架工具集 — 纯 Python 标准库实现，无外部依赖。
 ## 算法原理与复杂度分析
 
 ### 1. ReAct推理循环
-- **原理**: 实现Reasoning+Acting范式 — 每轮先生成Thought(推理过程)，然后选择Action(工具调用)，获取Observation(工具返回)，循环直到得出最终答案或达到最大迭代。支持推理链追踪记录完整执行路径。
+- **原理**: 实现Reasoning+Acting范式 — 每轮先生成Thought(推理过程)，然后选择Action(工具调用)，获取Observation(工具返回)，循环直到得出最终答案或达到最大迭代。支持推理链追踪记录完整执行路径。内置工具调用计数安全检查，防止无限循环。
 - **时间复杂度**: O(I×T)，I=最大迭代数，T=每次工具调用时间。
 
 ### 2. 链式思维求解器
@@ -48,7 +50,7 @@ AI Agent 框架工具集 — 纯 Python 标准库实现，无外部依赖。
 - **时间复杂度**: O(L)，L=提示词长度。
 
 ### 8. 多Agent协调器
-- **原理**: 支持三种协调协议 — ①协作: 所有Agent共同完成任务，结果合并；②竞争: Agent独立完成，选最优结果；③层级: 管理者Agent分配子任务给工作者Agent，汇总结果。
+- **原理**: 支持三种协调协议 — 协作: 所有Agent共同完成任务，结果合并；竞争: Agent独立完成，选最优结果；层级: 管理者Agent分配子任务给工作者Agent，汇总结果。
 - **时间复杂度**: O(A×M)，A=Agent数，M=消息轮数。
 
 ### 9. 响应解析验证器
@@ -76,11 +78,15 @@ from main import (
 )
 
 # ReAct推理循环
-tools = [{"name": "calculator", "func": lambda x: str(eval(x))}]
+tools = {"calculator": lambda x: str(eval(x))}
 result = react_reasoning_loop("计算 (3+5)*2", tools, max_iterations=5)
 
 # 链式思维求解
-steps = ["解析括号", "计算3+5=8", "计算8*2=16"]
+steps = [
+    {"description": "解析括号"},
+    {"description": "计算3+5=8"},
+    {"description": "计算8*2=16"},
+]
 result = chain_of_thought_solver("计算(3+5)*2", steps)
 
 # Few-shot模板
@@ -88,24 +94,68 @@ examples = [{"input": "1+1", "output": "2"}, {"input": "2+3", "output": "5"}]
 result = few_shot_template_engine("math", examples, "3+4")
 
 # 工作流编排
-tasks = [{"id": "A"}, {"id": "B", "depends": ["A"]}]
-deps = {"B": ["A"]}
-result = agent_workflow_orchestrator(tasks, deps, agents)
+tasks = {
+    "A": {"name": "Task A", "action": lambda p: "A done"},
+    "B": {"name": "Task B", "action": lambda p: "B done"},
+}
+deps = [("A", "B")]
+result = agent_workflow_orchestrator(tasks, deps, {})
 
 # 记忆管理
-memory_manager_short_long_term("add", {"content": "Python是解释型语言"}, {})
-result = memory_manager_short_long_term("retrieve", {"query": "Python特点"}, {"top_k": 5})
+memory_manager_short_long_term("add_long", "Python是解释型语言", {})
+result = memory_manager_short_long_term("retrieve_long", "Python", {"top_k": 5})
 
 # 提示词优化
-optimized = prompt_optimizer("帮我写个好一点的文章", ["清晰", "有结构"])
+optimized = prompt_optimizer("帮我写文章", ["clarity", "role", "format"])
 
 # 评估指标
-outputs = ["A", "B", "A"]
-truth = ["A", "B", "B"]
+outputs = [{"answer": "A", "response_time": 1.0}, {"answer": "B", "response_time": 0.5}]
+truth = [{"answer": "A"}, {"answer": "B"}]
 metrics = agent_evaluation_metrics(outputs, truth)
-print(f"F1: {metrics['f1']}")
+print(f"F1: {metrics['f1_score']}")
+```
+
+## 开发与测试
+
+### 安装依赖
+
+```bash
+pip install -r requirements.txt
+```
+
+### 运行测试
+
+```bash
+# 运行全部测试
+pytest tests/ -v
+
+# 运行特定测试类
+pytest tests/test_main.py::TestReactReasoningLoop -v
+
+# 运行测试并显示覆盖率（需要 pytest-cov）
+pytest tests/ -v --cov=.
+```
+
+### 代码检查
+
+```bash
+flake8 main.py tests/
+```
+
+### 直接运行自测
+
+```bash
+python main.py
 ```
 
 ## 依赖
 
-无外部依赖（仅使用Python标准库: json, re, collections, time, math, functools, hashlib）。
+核心功能无外部依赖（仅使用Python标准库: json, re, collections, time, math, functools, hashlib）。
+
+开发/测试依赖: pytest>=7.0, flake8>=6.0（见 requirements.txt）。
+
+## CI/CD
+
+本仓库通过 GitHub Actions 进行自动化测试。每次 push 和 PR 到 main 分支时，将在 Python 3.10、3.11、3.12 三个版本上运行 flake8 代码检查和 pytest 测试。
+
+详见 [.github/workflows/ci.yml](.github/workflows/ci.yml)。
